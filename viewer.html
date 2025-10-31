@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Viewer</title>
+  <style>
+    body { background:#000; color:#0f0; font-family:monospace; text-align:center; }
+    video { width:100%; border:2px solid #0f0; margin-top:10px; }
+    #logBox {
+      position:fixed; bottom:0; left:0; width:100%; max-height:50%;
+      overflow-y:auto; background:rgba(0,0,0,0.85); border-top:2px solid #0f0;
+      font-size:13px; text-align:left; padding:6px;
+    }
+    .logEntry { margin:2px 0; border-bottom:1px dashed #0f0; padding-bottom:2px; }
+  </style>
+</head>
+<body>
+  <h2>🖥️ Screen Viewer</h2>
+  <video id="remoteVideo" autoplay playsinline></video>
+  <div id="logBox"></div>
+
+  <script>
+    const logBox = document.getElementById("logBox");
+    function log(msg) {
+      const line = document.createElement("div");
+      line.className = "logEntry";
+      line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      logBox.appendChild(line);
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    const socket = new WebSocket("wss://prototypes-le04.onrender.com");
+    const video = document.getElementById("remoteVideo");
+    const peer = new RTCPeerConnection();
+
+    peer.ontrack = e => {
+      video.srcObject = e.streams[0];
+      log("Remote stream attached");
+    };
+    peer.onicecandidate = e => {
+      if (e.candidate) {
+        socket.send(JSON.stringify({ candidate: e.candidate }));
+        log("Sent local ICE candidate");
+      }
+    };
+
+    socket.onopen = () => log("Connected to signaling server ✅");
+    socket.onerror = e => log("WebSocket error: " + e.message);
+    socket.onclose = () => log("WebSocket closed ❌");
+
+    socket.onmessage = async e => {
+      const data = JSON.parse(e.data);
+      log("Received: " + Object.keys(data).join(", "));
+
+      if (data.offer) {
+        await peer.setRemoteDescription(new RTCSessionDescription(data.offer));
+        const answer = await peer.createAnswer();
+        await peer.setLocalDescription(answer);
+        socket.send(JSON.stringify({ answer }));
+        log("Answer sent to signaling server");
+      } else if (data.candidate) {
+        await peer.addIceCandidate(new RTCIceCandidate(data.candidate));
+        log("Remote ICE candidate added");
+      }
+    };
+  </script>
+</body>
+</html>
