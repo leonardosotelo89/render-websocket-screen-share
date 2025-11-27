@@ -7,6 +7,9 @@
 <body style="background:black;color:lime;">
 <button id="start">Start Share</button>
 
+<div id="status-ws" style="color: yellow;">WS: connecting...</div>
+<div id="status-stream" style="color: cyan;">STREAM: idle</div>
+
 <script>
 //const ws = new WebSocket("ws://localhost:8080");   // CAMBIAR si es remoto
 const ws = new WebSocket("wss://render-websocket-screen-share.onrender.com");   
@@ -49,9 +52,35 @@ async function loop(t) {
         ws.send(await blob.arrayBuffer());
       }
     }, "image/webp", 0.60); // calidad ajustable
+    notifyStreaming() 
   }
 
   requestAnimationFrame(loop);
+}
+
+ws.onopen = () => {
+  document.getElementById("status-ws").textContent = "WS: connected";
+  document.getElementById("status-ws").style.color = "lime";
+};
+
+ws.onerror = () => {
+  document.getElementById("status-ws").textContent = "WS: error";
+  document.getElementById("status-ws").style.color = "red";
+};
+
+ws.onclose = () => {
+  document.getElementById("status-ws").textContent = "WS: disconnected";
+  document.getElementById("status-ws").style.color = "orange";
+};
+
+function notifyStreaming() {
+  document.getElementById("status-stream").textContent = "STREAM: sending frames...";
+  document.getElementById("status-stream").style.color = "lime";
+}
+
+function notifyStopped() {
+  document.getElementById("status-stream").textContent = "STREAM: stopped";
+  document.getElementById("status-stream").style.color = "red";
 }
 </script>
 </body>
