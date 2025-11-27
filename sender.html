@@ -1,81 +1,58 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <title>Sender</title>
-  <style>
-    body { background:#000; color:#0f0; font-family:monospace; text-align:center; }
-    video { width:100%; border:2px solid #0f0; margin-top:10px; }
-    button { background:#0f0; color:#000; padding:10px; border:none; cursor:pointer; }
-    #logBox {
-      position:fixed; bottom:0; left:0; width:100%; max-height:50%;
-      overflow-y:auto; background:rgba(0,0,0,0.85); border-top:2px solid #0f0;
-      font-size:13px; text-align:left; padding:6px;
-    }
-    .logEntry { margin:2px 0; border-bottom:1px dashed #0f0; padding-bottom:2px; }
-  </style>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sender</title>
 </head>
-<body>
-  <h2>📡 Screen Sender</h2>
-  <button id="startBtn">Share Screen</button>
-  <video id="preview" autoplay playsinline></video>
-  <div id="logBox"></div>
+<body style="background:black;color:lime;">
+<button id="start">Start Share</button>
 
-  <script>
-    const logBox = document.getElementById("logBox");
-    function log(msg) {
-      const line = document.createElement("div");
-      line.className = "logEntry";
-      line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-      logBox.appendChild(line);
-      logBox.scrollTop = logBox.scrollHeight;
-    }
+<script>
+const ws = new WebSocket("ws://localhost:8080");   // CAMBIAR si es remoto
+ws.binaryType = "arraybuffer";
 
-    const socket = new WebSocket("https://render-websocket-screen-share.onrender.com");
-    const video = document.getElementById("preview");
-    const startBtn = document.getElementById("startBtn");
+let video, canvas, ctx;
+let last = 0;
+const FPS = 12;   // ajustable
 
-    socket.onopen = () => log("Connected to signaling server ✅");
-    socket.onerror = e => log("WebSocket error: " + e.message);
-    socket.onclose = () => log("WebSocket closed ❌");
+document.getElementById("start").onclick = async () => {
+  const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
 
-    let peer;
+  video = document.createElement("video");
+  video.srcObject = stream;
+  await video.play();
 
-    socket.onmessage = async e => {
-      const data = JSON.parse(e.data);
-      log("Received: " + Object.keys(data).join(", "));
-      if (peer && data.answer) {
-        await peer.setRemoteDescription(new RTCSessionDescription(data.answer));
-        log("Remote answer applied");
-      } else if (peer && data.candidate) {
-        await peer.addIceCandidate(new RTCIceCandidate(data.candidate));
-        log("Remote ICE candidate added");
+  canvas = document.createElement("canvas");
+  ctx = canvas.getContext("2d");
+
+  requestAnimationFrame(loop);
+};
+
+async function loop(t) {
+  if (t - last >= 1000 / FPS) {
+    last = t;
+
+    // preparar canvas
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    ctx.drawImage(video, 0, 0);
+
+    // en lugar de base64 → BLOB → ArrayBuffer → WebSocket binario
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      if (ws.readyState !== WebSocket.OPEN) return;
+
+      // control básico de atasco
+      if (ws.bufferedAmount < 2_000_000) {
+        ws.send(await blob.arrayBuffer());
       }
-    };
+    }, "image/webp", 0.60); // calidad ajustable
+  }
 
-    startBtn.onclick = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getDisplayMedia({ video:true, audio:false });
-        video.srcObject = stream;
-        log("Display stream captured");
-
-        peer = new RTCPeerConnection();
-        stream.getTracks().forEach(track => peer.addTrack(track, stream));
-        peer.onicecandidate = e => {
-          if (e.candidate) {
-            socket.send(JSON.stringify({ candidate:e.candidate }));
-            log("Sent local ICE candidate");
-          }
-        };
-
-        const offer = await peer.createOffer();
-        await peer.setLocalDescription(offer);
-        socket.send(JSON.stringify({ offer }));
-        log("Offer sent to signaling server");
-      } catch (err) {
-        log("Error: " + err.message);
-      }
-    };
-  </script>
+  requestAnimationFrame(loop);
+}
+</script>
 </body>
 </html>
+
