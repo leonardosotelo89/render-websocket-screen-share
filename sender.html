@@ -9,7 +9,7 @@
 
 <script>
 //const ws = new WebSocket("ws://localhost:8080");   // CAMBIAR si es remoto
-const ws = new WebSocket("ws://https://render-websocket-screen-share.onrender.com:8080");   
+const ws = new WebSocket("wss://render-websocket-screen-share.onrender.com");   
 ws.binaryType = "arraybuffer";
 
 let video, canvas, ctx;
